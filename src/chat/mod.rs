@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use tinyroute::{Agent, Message, ToAddress};
 
 use super::twitch::{
@@ -12,36 +11,6 @@ use crate::log::{Level, LogMessage};
 use crate::config::Config;
 
 mod parse;
-
-// -----------------------------------------------------------------------------
-//     - Irc message -
-// -----------------------------------------------------------------------------
-#[derive(Debug, Deserialize, Serialize)]
-pub struct IrcMessage<'msg> {
-    user: Cow<'msg, str>,
-    channel: Cow<'msg, str>,
-    message: Cow<'msg, str>,
-    is_action: bool,
-    raw: Cow<'msg, str>,
-}
-
-impl<'msg> IrcMessage<'msg> {
-    fn new(
-        user: &'msg str,
-        channel: &'msg str,
-        message: &'msg str,
-        is_action: bool,
-        raw: &'msg str,
-    ) -> Self {
-        Self {
-            user: Cow::Borrowed(user),
-            channel: Cow::Borrowed(channel),
-            message: Cow::Borrowed(message),
-            is_action,
-            raw: Cow::Borrowed(raw),
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 //     - Irc Sink -
@@ -102,6 +71,7 @@ pub async fn run(
                                     break; // cause a reconnect
                                 }
                                 LogMessage::info(&agent, "< Pong");
+                                continue;
                             }
 
                             if let Some(msg) = parse::parse(&msg) {
@@ -117,23 +87,23 @@ pub async fn run(
                     let msg = agent_msg?;
                     match msg {
                         Message::RemoteMessage { sender, host, bytes } => {
-                            eprintln!("{}@{} > {:?}", sender.to_string(), host, bytes);
+                            LogMessage::info(&agent, format!("{}@{} > {:?}", sender.to_string(), host, bytes));
 
                             match bytes.as_ref() {
                                 b"shutdown" => agent.shutdown_router(),
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
                                         LogMessage::info(&agent, format!("{} subscribed to irc", sender.to_string()));
-                                        subscribers.push(sender);
+                                        subscribers.push(sender.clone());
+                                        agent.track(sender);
                                     }
                                 }
                                 _ => {}
                             }
 
                         }
-                        Message::Shutdown => {
-                            return Ok(())
-                        }
+                        Message::AgentRemoved(sender) => subscribers.retain(|s| s != &sender),
+                        Message::Shutdown => return Ok(()),
                         _ =>  {}
                     }
                 }

@@ -1,4 +1,4 @@
-use super::IrcMessage;
+use neotwitch::IrcMessage;
 
 fn parse_next<'a>(src: &'a str, pat: &str) -> (&'a str, usize) {
     let pos = src.find(pat).unwrap();
