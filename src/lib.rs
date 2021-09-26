@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 /// Irc message
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IrcMessage<'msg> {
-    user: Cow<'msg, str>,
-    channel: Cow<'msg, str>,
-    message: Cow<'msg, str>,
-    is_action: bool,
-    raw: Cow<'msg, str>,
+    pub user: Cow<'msg, str>,
+    pub channel: Cow<'msg, str>,
+    pub message: Cow<'msg, str>,
+    pub is_action: bool,
+    pub raw: Cow<'msg, str>,
 }
 
 impl<'msg> IrcMessage<'msg> {

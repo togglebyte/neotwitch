@@ -1,14 +1,10 @@
 use std::collections::VecDeque;
-use std::time::Instant;
 
+use anyhow::Result;
 use log::{error, info, warn};
 use tinyroute::{Agent, Message, ToAddress};
 
 use super::Address;
-
-fn convert_bytes_to_timestamp(bytes: tinyroute::Bytes) -> Instant {
-    todo!()
-}
 
 #[derive(Debug, serde::Serialize)]
 pub enum Level {
@@ -37,7 +33,7 @@ impl LogMessage {
                 message: msg.into(),
                 level,
             },
-        );
+        ).expect("Router has died");
     }
 
     pub fn info<T: Send + 'static>( agent: &Agent<T, Address>, msg: impl Into<String>) {
@@ -53,17 +49,17 @@ impl LogMessage {
     }
 
     fn to_string(&self) -> String {
-        format!("{:10.10} > {}", self.sender.to_string(), self.message)
+        format!("{:15.15} | {}", self.sender.to_string(), self.message)
     }
 }
 
 const LOG_LEN: usize = 1024;
 
-pub async fn run(mut agent: Agent<LogMessage, Address>) {
+pub async fn run(mut agent: Agent<LogMessage, Address>) -> Result<()> {
     let mut log = VecDeque::with_capacity(LOG_LEN);
     while let Ok(msg) = agent.recv().await {
         match msg {
-            Message::Value(log_msg, sender) => {
+            Message::Value(log_msg, _) => {
                 match log_msg.level {
                     Level::Info => info!("{}", log_msg.to_string()),
                     Level::Warning => warn!("{}", log_msg.to_string()),
@@ -76,11 +72,8 @@ pub async fn run(mut agent: Agent<LogMessage, Address>) {
 
                 log.push_back(log_msg);
             }
-            Message::RemoteMessage { bytes, sender, .. } => {
-                let timestamp = convert_bytes_to_timestamp(bytes);
-                // for message in log.iter().filter(|m| m.timestamp >= timestamp) {
-                //     agent.send_remote(
-                // }
+            Message::RemoteMessage { .. } => {
+                // TODO: send the log to the sender
             }
             Message::Shutdown => break,
             _ => {}
@@ -88,4 +81,5 @@ pub async fn run(mut agent: Agent<LogMessage, Address>) {
     }
 
     info!("Shut down the logger");
+    Ok(())
 }

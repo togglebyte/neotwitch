@@ -1,5 +1,5 @@
 use anyhow::Result;
-use tinyroute::{Agent, Router, ToAddress};
+use tinyroute::{Router, ToAddress};
 
 mod channelpoints;
 mod chat;
@@ -7,6 +7,8 @@ mod config;
 mod log;
 mod server;
 mod twitch;
+
+pub const MAX_RETRIES: u64 = 5;
 
 // -----------------------------------------------------------------------------
 //     - Address -
@@ -74,10 +76,10 @@ async fn main() -> Result<()> {
     router.run().await;
 
     // Wait for the handles to finish before exiting
-    // log_handle.await?;
-    chat_handle.await?;
-    // cpoints_handle.await?;
-    server_handle.await?;
+    log_handle.await??;
+    chat_handle.await??;
+    cpoints_handle.await??;
+    server_handle.await??;
 
     // ... and done
     Ok(())

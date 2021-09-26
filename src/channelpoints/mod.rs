@@ -1,12 +1,12 @@
-use anyhow::{Result, anyhow};
-use log::{info, warn};
+use std::time::Duration;
+
+use anyhow::Result;
 use rand::distributions::Alphanumeric;
 use rand::prelude::*;
 use tinyroute::{Agent, Message, ToAddress};
+use tokio::time;
 
-use super::twitch::{
-    connect_channel_points, Sink, SinkExt, Stream, StreamExt, WsMessage,
-};
+use super::twitch::{connect_channel_points, SinkExt, StreamExt, WsMessage};
 use super::Address;
 use crate::log::LogMessage;
 
@@ -15,14 +15,6 @@ use crate::log::LogMessage;
 // -----------------------------------------------------------------------------
 fn nonce() -> String {
     thread_rng().sample_iter(&Alphanumeric).map(char::from).take(18).collect()
-}
-
-fn parse_twitch_message(msg: String) -> Result<neotwitch::Message> {
-    match serde_json::from_str::<neotwitch::TwitchMessage>(&msg) {
-        Ok(neotwitch::TwitchMessage::Message { data }) => Ok(data),
-        Ok(_) => Err(anyhow!("Not a `Twitch Message` message. Ignoring")),
-        Err(e) => Err(anyhow!("Failed to parse twitch message: {:?}", e)),
-    }
 }
 
 pub async fn run(
@@ -52,10 +44,31 @@ pub async fn run(
 
     let mut subscribers = Vec::new();
 
+    let mut reconnect_count = 0;
     'reconnect: loop {
-        let (mut sink, mut stream) = connect_channel_points().await?;
+        reconnect_count += 1;
+
+        if reconnect_count > super::MAX_RETRIES {
+            break 'reconnect;
+        }
+
+        let (mut sink, mut stream) = match connect_channel_points().await {
+            Ok(s) => {
+                reconnect_count = 0;
+                s
+            }
+            Err(_) => {
+                LogMessage::error(
+                    &agent,
+                    "Failed to connect to Twitch IRC via websockets",
+                );
+                time::sleep(Duration::from_secs(reconnect_count)).await;
+                continue;
+            }
+        };
         if let Err(e) = sink.send(WsMessage::Text(text.clone())).await {
             LogMessage::warn(&agent, format!("Websocket error: {}", e));
+            continue;
         };
 
         loop {
@@ -70,17 +83,11 @@ pub async fn run(
                             LogMessage::error(&agent, format!("Failed to do things: {}", e));
                             break;
                         }
-                        Some(Ok(WsMessage::Text(msg))) => match agent.send_remote(&subscribers, msg.as_bytes()) {
-                            Ok(()) => continue,
-                            Err(e) => {
-                                LogMessage::error(&agent, format!("Failed to send Twitch message: {}", e));
-                                break 'reconnect;
-                            }
-                        }
+                        Some(Ok(WsMessage::Text(msg))) => agent.send_remote(&subscribers, msg.as_bytes())?,
                         Some(Ok(_)) => continue,
                     }
                 }
-                agent_msg = agent.recv() => { 
+                agent_msg = agent.recv() => {
                     let msg = agent_msg?;
                     match msg {
                         Message::RemoteMessage { sender, host, bytes } => {
@@ -90,18 +97,19 @@ pub async fn run(
                                 b"shutdown" => agent.shutdown_router(),
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
-                                        LogMessage::info(&agent, format!("{} subscribed to irc", sender.to_string()));
+                                        LogMessage::info(&agent, format!("{} subscribed to channelpoint events", sender.to_string()));
                                         subscribers.push(sender.clone());
-                                        agent.track(sender);
+                                        agent.track(sender)?;
                                     }
-
-                                    eprintln!("there is a total of: {} subscribers", subscribers.len());
                                 }
                                 _ => {}
                             }
 
                         }
-                        Message::AgentRemoved(sender) => subscribers.retain(|s| s != &sender),
+                        Message::AgentRemoved(sender) => {
+                            LogMessage::info(&agent, format!("{} unsubscribed from channelpoint events", sender.to_string()));
+                            subscribers.retain(|s| s != &sender);
+                        }
                         Message::Shutdown => return Ok(()),
                         _ =>  {}
                     }

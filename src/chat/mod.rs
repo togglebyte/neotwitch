@@ -1,13 +1,13 @@
-use std::borrow::Cow;
-
+use std::time::Duration;
 use anyhow::Result;
 use tinyroute::{Agent, Message, ToAddress};
+use tokio::time;
 
 use super::twitch::{
     connect_chat, Sink, SinkExt, Stream, StreamExt, WsMessage,
 };
 use super::Address;
-use crate::log::{Level, LogMessage};
+use crate::log::LogMessage;
 use crate::config::Config;
 
 mod parse;
@@ -25,14 +25,14 @@ impl IrcWriter {
 }
 
 async fn connect_irc(config: &Config, agent: &Agent<(), Address>) -> Result<(IrcWriter, Stream)> {
-    let (sink, mut stream) = connect_chat().await?;
+    let (sink, stream) = connect_chat().await?;
     let mut sink = IrcWriter(sink);
 
-    sink.send(format!("PASS oauth:{}\r\n", config.token)).await;
-    sink.send(format!("NICK {}\r\n", config.nick)).await;
+    sink.send(format!("PASS oauth:{}\r\n", config.token)).await?;
+    sink.send(format!("NICK {}\r\n", config.nick)).await?;
 
     for channel in &config.irc_channels {
-        sink.send(format!("JOIN {}\r\n", channel)).await;
+        sink.send(format!("JOIN {}\r\n", channel)).await?;
         LogMessage::info(agent, format!("Joined {}", channel));
     }
 
@@ -48,8 +48,26 @@ pub async fn run(
 ) -> Result<()> {
     let mut subscribers: Vec<Address> = Vec::new();
 
+    let mut reconnect_count = 0;
+
     'reconnect: loop {
-        let (mut sink, mut stream) = connect_irc(config, &agent).await?;
+        reconnect_count += 1;
+
+        if reconnect_count > super::MAX_RETRIES {
+            break 'reconnect;
+        }
+
+        let (mut sink, mut stream) = match connect_irc(config, &agent).await {
+            Ok(s) => {
+                reconnect_count = 0;
+                s
+            }
+            Err(_) => {
+                LogMessage::error(&agent, "Failed to connect to Twitch IRC via websockets");
+                time::sleep(Duration::from_secs(reconnect_count as u64)).await;
+                continue;
+            }
+        };
 
         loop {
             tokio::select! {
@@ -66,7 +84,7 @@ pub async fn run(
                         Some(Ok(WsMessage::Text(msg))) => {
                             if msg.starts_with("PING") {
                                 LogMessage::info(&agent, "> Ping");
-                                if let Err(res) = sink.send("PONG".to_string()).await {
+                                if let Err(_) = sink.send("PONG".to_string()).await {
                                     LogMessage::error(&agent, "Failed to pong");
                                     break; // cause a reconnect
                                 }
@@ -76,7 +94,7 @@ pub async fn run(
 
                             if let Some(msg) = parse::parse(&msg) {
                                 let bytes = serde_json::to_vec(&msg).unwrap();
-                                agent.send_remote(&subscribers, &bytes);
+                                agent.send_remote(&subscribers, &bytes)?;
                             }
                         }
                         Some(_) => {} // unsupported message
@@ -95,14 +113,17 @@ pub async fn run(
                                     if !subscribers.contains(&sender) {
                                         LogMessage::info(&agent, format!("{} subscribed to irc", sender.to_string()));
                                         subscribers.push(sender.clone());
-                                        agent.track(sender);
+                                        agent.track(sender)?;
                                     }
                                 }
                                 _ => {}
                             }
 
                         }
-                        Message::AgentRemoved(sender) => subscribers.retain(|s| s != &sender),
+                        Message::AgentRemoved(sender) => {
+                            LogMessage::info(&agent, format!("{} unsubscribed from irc", sender.to_string()));
+                            subscribers.retain(|s| s != &sender);
+                        }
                         Message::Shutdown => return Ok(()),
                         _ =>  {}
                     }
