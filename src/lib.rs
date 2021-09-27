@@ -1,17 +1,28 @@
+use std::collections::HashMap;
 use std::borrow::Cow;
-use serde::{Deserialize, Serialize};
 
+use serde::{Deserialize, Serialize};
 // -----------------------------------------------------------------------------
-//     - Irc message -
+//     - Irc -
 // -----------------------------------------------------------------------------
 /// Irc message
+#[derive(Debug, Deserialize, Serialize)]
+pub enum Irc<'msg> {
+    ClearChat,
+    Message(IrcMessage<'msg>)
+}
+
+// -----------------------------------------------------------------------------
+//     - Priv message -
+// -----------------------------------------------------------------------------
+/// Priv message (channel message)
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IrcMessage<'msg> {
     pub user: Cow<'msg, str>,
     pub channel: Cow<'msg, str>,
     pub message: Cow<'msg, str>,
-    pub is_action: bool,
-    pub raw: Cow<'msg, str>,
+    pub action: bool,
+    pub tags: HashMap<String, String>,
 }
 
 impl<'msg> IrcMessage<'msg> {
@@ -19,15 +30,15 @@ impl<'msg> IrcMessage<'msg> {
         user: &'msg str,
         channel: &'msg str,
         message: &'msg str,
-        is_action: bool,
-        raw: &'msg str,
+        action: bool,
+        tags: HashMap<String, String>,
     ) -> Self {
         Self {
             user: Cow::Borrowed(user),
             channel: Cow::Borrowed(channel),
             message: Cow::Borrowed(message),
-            is_action,
-            raw: Cow::Borrowed(raw),
+            action,
+            tags,
         }
     }
 }

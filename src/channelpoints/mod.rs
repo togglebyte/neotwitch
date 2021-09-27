@@ -83,7 +83,10 @@ pub async fn run(
                             LogMessage::error(&agent, format!("Failed to do things: {}", e));
                             break;
                         }
-                        Some(Ok(WsMessage::Text(msg))) => agent.send_remote(&subscribers, msg.as_bytes())?,
+                        Some(Ok(WsMessage::Text(msg))) => {
+                            eprintln!("{:?}", msg);
+                            agent.send_remote(&subscribers, msg.as_bytes())?;
+                        }
                         Some(Ok(_)) => continue,
                     }
                 }

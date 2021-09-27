@@ -30,6 +30,7 @@ async fn connect_irc(config: &Config, agent: &Agent<(), Address>) -> Result<(Irc
 
     sink.send(format!("PASS oauth:{}\r\n", config.token)).await?;
     sink.send(format!("NICK {}\r\n", config.nick)).await?;
+    sink.send(format!("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n")).await?;
 
     for channel in &config.irc_channels {
         sink.send(format!("JOIN {}\r\n", channel)).await?;
@@ -82,6 +83,9 @@ pub async fn run(
                             break; // cause a reconnect
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
+                            eprintln!("{:?}", msg);
+
+
                             if msg.starts_with("PING") {
                                 LogMessage::info(&agent, "> Ping");
                                 if let Err(_) = sink.send("PONG".to_string()).await {
