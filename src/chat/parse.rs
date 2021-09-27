@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use neotwitch::{Irc, IrcMessage};
@@ -32,15 +31,11 @@ impl<'msg> Cursor<'msg> {
         self.next_pat(pat, true)?;
         Some(())
     }
-
-    pub fn remaining(self) -> &'msg str {
-        &self.src[self.pos..]
-    }
 }
 
 const ACTION: &str = "\u{1}ACTION ";
 
-pub fn parse<'msg>(mut raw: &'msg str) -> Option<Irc<'msg>> {
+pub fn parse<'msg>(raw: &'msg str) -> Option<Irc<'msg>> {
     let mut cursor = Cursor::new(raw);
 
     // Tags
@@ -70,8 +65,6 @@ pub fn parse<'msg>(mut raw: &'msg str) -> Option<Irc<'msg>> {
         _ => None,
     }
 }
-
-fn parse_prefix(cursor: &mut Cursor) {}
 
 fn parse_msg<'msg>(
     prefix: &'msg str,

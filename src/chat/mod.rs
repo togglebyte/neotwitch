@@ -83,9 +83,6 @@ pub async fn run(
                             break; // cause a reconnect
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
-                            eprintln!("{:?}", msg);
-
-
                             if msg.starts_with("PING") {
                                 LogMessage::info(&agent, "> Ping");
                                 if let Err(_) = sink.send("PONG".to_string()).await {

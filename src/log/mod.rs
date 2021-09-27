@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use log::{error, info, warn};
+use log::{error, info};
 use tinyroute::{Agent, Message, ToAddress};
 
 use super::Address;
@@ -9,7 +9,6 @@ use super::Address;
 #[derive(Debug, serde::Serialize)]
 pub enum Level {
     Info,
-    Warning,
     Error,
 }
 
@@ -40,10 +39,6 @@ impl LogMessage {
         Self::send(agent, msg, Level::Info);
     }
 
-    pub fn warn<T: Send + 'static>( agent: &Agent<T, Address>, msg: impl Into<String>) {
-        Self::send(agent, msg, Level::Warning);
-    }
-
     pub fn error<T: Send + 'static>( agent: &Agent<T, Address>, msg: impl Into<String>) {
         Self::send(agent, msg, Level::Error);
     }
@@ -62,7 +57,6 @@ pub async fn run(mut agent: Agent<LogMessage, Address>) -> Result<()> {
             Message::Value(log_msg, _) => {
                 match log_msg.level {
                     Level::Info => info!("{}", log_msg.to_string()),
-                    Level::Warning => warn!("{}", log_msg.to_string()),
                     Level::Error => error!("{}", log_msg.to_string()),
                 }
 

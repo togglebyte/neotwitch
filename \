@@ -32,7 +32,7 @@ fn start_sink(
     tokio::spawn(async move {
         while let Some(m) = sink_rx.recv().await {
             if let Err(e) = sink.send(m).await {
-                let _ = response_tx.send(Err(anyhow!("Sink error: {}", e))).await;
+                response_tx.send(Err(anyhow!("Sink error: {}", e))).await;
                 break;
             }
         }
@@ -61,37 +61,18 @@ fn heartbeat(
         let mut time_since_ping = Instant::now();
         let mut time_since_pong = Instant::now();
         loop {
+            if let Err(e) = sink_tx.send(heartbeat.clone()).await {
+                break;
+            };
             let jitter = thread_rng().gen_range(10..1000);
-            let minutes = 1;
-            let millis = 1000 * 60 * minutes - jitter;
+            let millis = 1000 * 60 * 5 - jitter;
+            eprintln!("{:?}", millis);
             tokio::select! {
                 _ = time::sleep(Duration::from_millis(millis)) => {
-                    // If more than ten seconds has elapsed 
-                    // then break and send an error to restart
-                    if time_since_ping.elapsed() > time_since_pong.elapsed() {
-                        if (time_since_ping.elapsed() - time_since_pong.elapsed()) > Duration::from_secs(10) {
-                            let _ = response_tx.send(Err(anyhow!("Over ten seconds since last pong"))).await;
-                            break
-                        }
-                    }
-
                     time_since_ping = Instant::now();
-
-                    if let Err(_) = sink_tx.send(heartbeat.clone()).await {
-                        break;
-                    };
                 }
                 pong_instant = rx.recv() => match pong_instant {
-                    Some(pong) => {
-                        time_since_pong = pong;
-                        // If more than ten seconds has elapsed 
-                        // then break and send an error to restart
-                        if (time_since_ping.elapsed() - time_since_pong.elapsed()) > Duration::from_secs(10) {
-                            eprintln!("b) pong diff {:?}", time_since_ping.elapsed() - time_since_pong.elapsed());
-                            let _ = response_tx.send(Err(anyhow!("Over ten seconds since last pong"))).await;
-                            break
-                        }
-                    }
+                    Some(pong) => time_since_pong = pong,
                     None => break,
                 }
             };
@@ -137,7 +118,7 @@ pub async fn run(
             break 'reconnect;
         }
 
-        let (sink, mut stream) = match connect_channel_points().await {
+        let (mut sink, mut stream) = match connect_channel_points().await {
             Ok(s) => {
                 reconnect_count = 0;
                 s
@@ -164,15 +145,7 @@ pub async fn run(
 
         loop {
             tokio::select! {
-                response = response.recv() => {
-                    match response {
-                        None => break,
-                        Some(Err(e)) => {
-                            LogMessage::error(&agent, format!("Channel points websocket closed: {}", e));
-                            break;
-                        }
-                        Some(Ok(())) => continue,
-                    }
+                _ = response.recv() => {
                 }
                 ws_msg = stream.next() => {
                     match ws_msg {
@@ -189,10 +162,7 @@ pub async fn run(
                             let bytes = msg.as_bytes();
                             match serde_json::from_slice::<TwitchMessage>(&bytes) {
                                 Ok(TwitchMessage::Pong) => {
-                                    if let Err(e) = heartbeat_tx.send(Instant::now()).await {
-                                        LogMessage::error(&agent, format!("Heartbeat error: {}", e));
-                                        break
-                                    }
+                                    heartbeat_tx.send(Instant::now()).await;
                                 },
                                 Ok(TwitchMessage::Reconnect) => break,
                                 _ => {}
