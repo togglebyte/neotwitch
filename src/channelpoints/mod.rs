@@ -87,7 +87,6 @@ fn heartbeat(
                         // If more than ten seconds has elapsed 
                         // then break and send an error to restart
                         if (time_since_ping.elapsed() - time_since_pong.elapsed()) > Duration::from_secs(10) {
-                            eprintln!("b) pong diff {:?}", time_since_ping.elapsed() - time_since_pong.elapsed());
                             let _ = response_tx.send(Err(anyhow!("Over ten seconds since last pong"))).await;
                             break
                         }
@@ -185,7 +184,6 @@ pub async fn run(
                             break;
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
-                            eprintln!("{:?}", msg);
                             let bytes = msg.as_bytes();
                             match serde_json::from_slice::<TwitchMessage>(&bytes) {
                                 Ok(TwitchMessage::Pong) => {
