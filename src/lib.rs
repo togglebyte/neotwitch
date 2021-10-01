@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
+
 // -----------------------------------------------------------------------------
 //     - Irc -
 // -----------------------------------------------------------------------------
 /// Irc message
 #[derive(Debug, Deserialize, Serialize)]
-pub enum Irc<'msg> {
+pub enum Irc {
     ClearChat,
-    Message(IrcMessage<'msg>)
+    Message(IrcMessage)
 }
 
 // -----------------------------------------------------------------------------
@@ -17,26 +17,26 @@ pub enum Irc<'msg> {
 // -----------------------------------------------------------------------------
 /// Priv message (channel message)
 #[derive(Debug, Deserialize, Serialize)]
-pub struct IrcMessage<'msg> {
-    pub user: Cow<'msg, str>,
-    pub channel: Cow<'msg, str>,
-    pub message: Cow<'msg, str>,
+pub struct IrcMessage {
+    pub user: String,
+    pub channel: String,
+    pub message: String,
     pub action: bool,
     pub tags: HashMap<String, String>,
 }
 
-impl<'msg> IrcMessage<'msg> {
+impl IrcMessage {
     pub fn new(
-        user: &'msg str,
-        channel: &'msg str,
-        message: &'msg str,
+        user: String,
+        channel: String,
+        message: String,
         action: bool,
         tags: HashMap<String, String>,
     ) -> Self {
         Self {
-            user: Cow::Borrowed(user),
-            channel: Cow::Borrowed(channel),
-            message: Cow::Borrowed(message),
+            user,
+            channel,
+            message,
             action,
             tags,
         }
@@ -49,7 +49,7 @@ impl<'msg> IrcMessage<'msg> {
 // -----------------------------------------------------------------------------
 
 /// Base message
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TwitchMessage {
     /// Response to a PING sent to Twitch
@@ -70,7 +70,7 @@ pub enum TwitchMessage {
     Unknown,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Message {
     /// Topic the message belongs to (e.g channel points event)
     pub topic: String,
@@ -148,13 +148,13 @@ pub struct SubscribeEvent {
     /// Number of months gifted as part of a single, multi-month gift OR number of months purchased as part of a multi-month subscription
     pub multi_month_duration: Option<usize>,
     /// The body of the user-entered resub message. Depending on the type of message, the message body contains different fields
-    pub message: String,
+    // pub sub_message: String,
 
     // I think this is wrong, it should just be "message"
-    //pub sub_message: SubscribeMessage,
+    pub sub_message: SubscribeMessage,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct SubscribeMessage {
     pub message: String,
     // emotes: Option<>

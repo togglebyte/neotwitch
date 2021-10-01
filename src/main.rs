@@ -1,10 +1,11 @@
 use anyhow::Result;
+use tinylog::Logger;
 use tinyroute::{Router, ToAddress};
+use tinyroute::client::{TcpClient, UdsClient};
 
 mod channelpoints;
 mod chat;
 mod config;
-mod log;
 mod server;
 mod twitch;
 
@@ -62,21 +63,23 @@ async fn main() -> Result<()> {
     let cpoints_agent = router.new_agent(1024, Address::ChannelPoints)?;
     let server_agent = router.new_agent(1024, Address::Server)?;
 
+    // Setup logging
+    // let socket_path = env::var("TINYLOG_SOCKET").map_err(|_| Error::MissingEnvVar)?;
+    // // let client = UdsClient::connect(socket_path).await?;
+    let client = TcpClient::connect("127.0.0.1:5566").await?;
+    let logger = Logger::new(log_agent, client).await?;
+
     // Handles, so the application can close properly
-    let log_handle = tokio::spawn(log::run(log_agent));
+    let log_handle = tokio::spawn(logger.run());
     let chat_handle = tokio::spawn(chat::run(chat_agent, config));
     let cpoints_handle = tokio::spawn(channelpoints::run(cpoints_agent, config));
-    let server_handle = tokio::spawn(server::run(
-        server_agent,
-        "127.0.0.1:6000",
-        router.router_tx(),
-    ));
+    let server_handle = tokio::spawn(server::run(server_agent, "127.0.0.1:6000"));
 
     // Run the router
     router.run().await;
 
     // Wait for the handles to finish before exiting
-    log_handle.await??;
+    log_handle.await?;
     chat_handle.await??;
     cpoints_handle.await??;
     server_handle.await??;

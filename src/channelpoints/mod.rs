@@ -1,18 +1,16 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
+use neotwitch::TwitchMessage;
 use rand::distributions::Alphanumeric;
 use rand::prelude::*;
+use tinylog::{tl_error, tl_info};
 use tinyroute::{Agent, Message, ToAddress};
 use tokio::sync::mpsc;
 use tokio::time;
 
-use super::twitch::{
-    connect_channel_points, Sink, SinkExt, StreamExt, WsMessage,
-};
+use super::twitch::{connect_channel_points, Sink, SinkExt, StreamExt, WsMessage};
 use super::Address;
-use crate::log::LogMessage;
-use neotwitch::TwitchMessage;
 
 // -----------------------------------------------------------------------------
 //     - Nonce -
@@ -24,10 +22,7 @@ fn nonce() -> String {
 // -----------------------------------------------------------------------------
 //     - Twitch sink -
 // -----------------------------------------------------------------------------
-fn start_sink(
-    mut sink: Sink,
-    response_tx: mpsc::Sender<Result<()>>,
-) -> mpsc::Sender<WsMessage> {
+fn start_sink(mut sink: Sink, response_tx: mpsc::Sender<Result<()>>) -> mpsc::Sender<WsMessage> {
     let (sink_tx, mut sink_rx) = mpsc::channel(100);
     tokio::spawn(async move {
         while let Some(m) = sink_rx.recv().await {
@@ -44,19 +39,14 @@ fn start_sink(
 // -----------------------------------------------------------------------------
 //     - Heartbeat loop -
 // -----------------------------------------------------------------------------
-fn heartbeat(
-    sink_tx: mpsc::Sender<WsMessage>,
-    response_tx: mpsc::Sender<Result<()>>,
-) -> mpsc::Sender<Instant> {
+fn heartbeat(sink_tx: mpsc::Sender<WsMessage>, response_tx: mpsc::Sender<Result<()>>) -> mpsc::Sender<Instant> {
     let (tx, mut rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         let heartbeat = serde_json::json!({
             "type": "PING"
         });
-        let heartbeat = WsMessage::Text(
-            serde_json::to_string(&heartbeat).expect("Nice valid JSON"),
-        );
+        let heartbeat = WsMessage::Text(serde_json::to_string(&heartbeat).expect("Nice valid JSON"));
 
         let mut time_since_ping = Instant::now();
         let mut time_since_pong = Instant::now();
@@ -66,7 +56,7 @@ fn heartbeat(
             let millis = 1000 * 60 * minutes - jitter;
             tokio::select! {
                 _ = time::sleep(Duration::from_millis(millis)) => {
-                    // If more than ten seconds has elapsed 
+                    // If more than ten seconds has elapsed
                     // then break and send an error to restart
                     if time_since_ping.elapsed() > time_since_pong.elapsed() {
                         if (time_since_ping.elapsed() - time_since_pong.elapsed()) > Duration::from_secs(10) {
@@ -84,7 +74,7 @@ fn heartbeat(
                 pong_instant = rx.recv() => match pong_instant {
                     Some(pong) => {
                         time_since_pong = pong;
-                        // If more than ten seconds has elapsed 
+                        // If more than ten seconds has elapsed
                         // then break and send an error to restart
                         if (time_since_ping.elapsed() - time_since_pong.elapsed()) > Duration::from_secs(10) {
                             let _ = response_tx.send(Err(anyhow!("Over ten seconds since last pong"))).await;
@@ -100,10 +90,7 @@ fn heartbeat(
     tx
 }
 
-pub async fn run(
-    mut agent: Agent<(), Address>,
-    config: &crate::config::Config,
-) -> Result<()> {
+pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) -> Result<()> {
     let topics = [
         format!("channel-bits-events-v2.{}", config.channel_id),
         format!("channel-points-channel-v1.{}", config.channel_id),
@@ -123,8 +110,7 @@ pub async fn run(
        }
     });
 
-    let listen_to_topics =
-        WsMessage::Text(serde_json::to_string(&data).expect("Nice valid JSON"));
+    let listen_to_topics = WsMessage::Text(serde_json::to_string(&data).expect("Nice valid JSON"));
 
     let mut subscribers = Vec::new();
 
@@ -142,10 +128,7 @@ pub async fn run(
                 s
             }
             Err(_) => {
-                LogMessage::error(
-                    &agent,
-                    "Failed to connect to Twitch IRC via websockets",
-                );
+                tl_error!(agent, Address::Log, "Failed to connect to Twitch IRC via websockets");
                 time::sleep(Duration::from_secs(reconnect_count)).await;
                 continue;
             }
@@ -157,7 +140,7 @@ pub async fn run(
         let heartbeat_tx = heartbeat(sink_tx.clone(), response_tx.clone());
 
         if let Err(e) = sink_tx.send(listen_to_topics.clone()).await {
-            LogMessage::error(&agent, format!("Websocket TX error: {}", e));
+            tl_error!(agent, Address::Log, "Websocket TX error: {}", e);
             break;
         };
 
@@ -167,7 +150,7 @@ pub async fn run(
                     match response {
                         None => break,
                         Some(Err(e)) => {
-                            LogMessage::error(&agent, format!("Channel points websocket closed: {}", e));
+                            tl_error!(agent, Address::Log, "Channel points websocket closed: {}", e);
                             break;
                         }
                         Some(Ok(())) => continue,
@@ -176,24 +159,35 @@ pub async fn run(
                 ws_msg = stream.next() => {
                     match ws_msg {
                         None => {
-                            LogMessage::error(&agent, "Channel points websocket closed");
+                            tl_error!(agent, Address::Log, "Channel points websocket closed");
                             break;
                         }
                         Some(Err(e)) => {
-                            LogMessage::error(&agent, format!("Websocket error: {}", e));
+                            tl_error!(agent, Address::Log, "Websocket error: {}", e);
                             break;
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
                             let bytes = msg.as_bytes();
                             match serde_json::from_slice::<TwitchMessage>(&bytes) {
-                                Ok(TwitchMessage::Pong) => {
-                                    if let Err(e) = heartbeat_tx.send(Instant::now()).await {
-                                        LogMessage::error(&agent, format!("Heartbeat error: {}", e));
-                                        break
+                                Ok(twitch_data) => {
+                                    match twitch_data {
+                                        TwitchMessage::Pong => {
+                                            if let Err(e) = heartbeat_tx.send(Instant::now()).await {
+                                                tl_error!(agent, Address::Log, "Heartbeat error: {}", e);
+                                                break
+                                            }
+                                        },
+                                        TwitchMessage::Reconnect => break,
+                                        _ => {}
                                     }
-                                },
-                                Ok(TwitchMessage::Reconnect) => break,
-                                _ => {}
+                                    // Log twith payload (maybe not?)
+                                    let s = serde_json::to_string(&twitch_data).expect("this was successfully serialize before, stop complaining");
+                                    tl_info!(agent, Address::Log, "{}", s);
+                                }
+                                Err(e) => {
+                                    tl_error!(agent, Address::Log, "Failed to serialize: {}", e);
+                                    continue;
+                                }
                             }
 
                             agent.send_remote(&subscribers, bytes)?;
@@ -205,23 +199,28 @@ pub async fn run(
                     let msg = agent_msg?;
                     match msg {
                         Message::RemoteMessage { sender, host, bytes } => {
-                            LogMessage::info(&agent, format!("{}@{} > {:?}", sender.to_string(), host, bytes));
+                            tl_info!(agent, Address::Log, "{}@{} > {:?}", sender.to_string(), host, bytes);
 
                             match bytes.as_ref() {
                                 b"shutdown" => agent.shutdown_router(),
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
-                                        LogMessage::info(&agent, format!("{} subscribed to channelpoint events", sender.to_string()));
+                                        tl_info!(agent, Address::Log, "{} subscribed to channelpoint events", sender.to_string());
                                         subscribers.push(sender.clone());
                                         agent.track(sender)?;
                                     }
                                 }
-                                _ => {}
+                                bytes if serde_json::from_slice::<TwitchMessage>(&bytes).is_ok() => {
+                                    agent.send_remote(&subscribers, bytes)?;
+                                }
+                                _ => {
+                                    eprintln!("{:?}", "failed to serialize data");
+                                }
                             }
 
                         }
                         Message::AgentRemoved(sender) => {
-                            LogMessage::info(&agent, format!("{} unsubscribed from channelpoint events", sender.to_string()));
+                            tl_info!(agent, Address::Log, "{} subscribed to channelpoint events", sender.to_string());
                             subscribers.retain(|s| s != &sender);
                         }
                         Message::Shutdown => return Ok(()),

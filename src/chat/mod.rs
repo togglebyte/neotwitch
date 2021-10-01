@@ -2,12 +2,12 @@ use std::time::Duration;
 use anyhow::Result;
 use tinyroute::{Agent, Message, ToAddress};
 use tokio::time;
+use tinylog::{tl_error, tl_info};
 
 use super::twitch::{
     connect_chat, Sink, SinkExt, Stream, StreamExt, WsMessage,
 };
 use super::Address;
-use crate::log::LogMessage;
 use crate::config::Config;
 
 mod parse;
@@ -24,6 +24,7 @@ impl IrcWriter {
     }
 }
 
+// The only reason we pass an agent to this function is to be able to log.
 async fn connect_irc(config: &Config, agent: &Agent<(), Address>) -> Result<(IrcWriter, Stream)> {
     let (sink, stream) = connect_chat().await?;
     let mut sink = IrcWriter(sink);
@@ -34,7 +35,7 @@ async fn connect_irc(config: &Config, agent: &Agent<(), Address>) -> Result<(Irc
 
     for channel in &config.irc_channels {
         sink.send(format!("JOIN {}\r\n", channel)).await?;
-        LogMessage::info(agent, format!("Joined {}", channel));
+        tl_info!(agent, Address::Log, "Joined {}", channel);
     }
 
     Ok((sink, stream))
@@ -64,7 +65,9 @@ pub async fn run(
                 s
             }
             Err(_) => {
-                LogMessage::error(&agent, "Failed to connect to Twitch IRC via websockets");
+                // let entry = LogEntry::error(agent.address(), "Failed to connect to Twitch IRC via websockets");
+                // agent.send(Address::Log, entry);
+                tl_error!(agent, Address::Log, "Failed to connect to Twitch IRC via websockets");
                 time::sleep(Duration::from_secs(reconnect_count as u64)).await;
                 continue;
             }
@@ -75,21 +78,23 @@ pub async fn run(
                 chat_msg = stream.next() => {
                     match chat_msg {
                         None => {
-                            LogMessage::error(&agent, "Twitch IRC ws closed");
+                            tl_error!(agent, Address::Log, "Twitch IRC ws closed");
                             break; // cause a reconnect
                         }
                         Some(Err(e)) => {
-                            LogMessage::error(&agent, format!("Failed to receive Twitch chat mesasge: {}", e));
+                            tl_error!(agent, Address::Log, "Failed to receive Twitch chat mesasge: {}", e);
                             break; // cause a reconnect
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
+                            tl_info!(agent, Address::Log, "{}", msg);
+
                             if msg.starts_with("PING") {
-                                LogMessage::info(&agent, "> Ping");
+                                tl_info!(agent, Address::Log, "> Ping");
                                 if let Err(_) = sink.send("PONG".to_string()).await {
-                                    LogMessage::error(&agent, "Failed to pong");
+                                    tl_error!(agent, Address::Log, "Failed to pong");
                                     break; // cause a reconnect
                                 }
-                                LogMessage::info(&agent, "< Pong");
+                                tl_info!(agent, Address::Log, "< Pong");
                                 continue;
                             }
 
@@ -106,13 +111,13 @@ pub async fn run(
                     let msg = agent_msg?;
                     match msg {
                         Message::RemoteMessage { sender, host, bytes } => {
-                            LogMessage::info(&agent, format!("{}@{} > {:?}", sender.to_string(), host, bytes));
+                            tl_info!(agent, Address::Log, "{}@{} > {:?}", sender.to_string(), host, bytes);
 
                             match bytes.as_ref() {
                                 b"shutdown" => agent.shutdown_router(),
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
-                                        LogMessage::info(&agent, format!("{} subscribed to irc", sender.to_string()));
+                                        tl_info!(agent, Address::Log, "{} subscribed to irc", sender.to_string());
                                         subscribers.push(sender.clone());
                                         agent.track(sender)?;
                                     }
@@ -122,7 +127,7 @@ pub async fn run(
 
                         }
                         Message::AgentRemoved(sender) => {
-                            LogMessage::info(&agent, format!("{} unsubscribed from irc", sender.to_string()));
+                            tl_info!(agent, Address::Log, "{} unsubscribed from irc", sender.to_string());
                             subscribers.retain(|s| s != &sender);
                         }
                         Message::Shutdown => return Ok(()),

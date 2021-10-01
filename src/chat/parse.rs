@@ -35,7 +35,7 @@ impl<'msg> Cursor<'msg> {
 
 const ACTION: &str = "\u{1}ACTION ";
 
-pub fn parse<'msg>(raw: &'msg str) -> Option<Irc<'msg>> {
+pub fn parse(raw: &str) -> Option<Irc> {
     let mut cursor = Cursor::new(raw);
 
     // Tags
@@ -66,12 +66,12 @@ pub fn parse<'msg>(raw: &'msg str) -> Option<Irc<'msg>> {
     }
 }
 
-fn parse_msg<'msg>(
-    prefix: &'msg str,
-    param: &'msg str,
-    trailing: &'msg str,
+fn parse_msg(
+    prefix: &str,
+    param: &str,
+    trailing: &str,
     tags: HashMap<String, String>,
-) -> Option<IrcMessage<'msg>> {
+) -> Option<IrcMessage> {
 
     // Username
     let mut cursor = Cursor::new(prefix);
@@ -94,7 +94,7 @@ fn parse_msg<'msg>(
         (msg, is_action)
     };
 
-    Some(IrcMessage::new(username, channel, msg, is_action, tags))
+    Some(IrcMessage::new(username.into(), channel.into(), msg.into(), is_action, tags))
 }
 
 fn parse_tags(cursor: &mut Cursor) -> HashMap<String, String> {
