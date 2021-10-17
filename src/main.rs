@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tinylog::Logger;
 use tinyroute::{Router, ToAddress};
-use tinyroute::client::{TcpClient, UdsClient};
+use tinyroute::client::TcpClient;
 
 mod channelpoints;
 mod chat;
@@ -14,7 +14,7 @@ pub const MAX_RETRIES: u64 = 5;
 // -----------------------------------------------------------------------------
 //     - Address -
 // -----------------------------------------------------------------------------
-#[derive(Debug, PartialEq, Eq, Clone, Hash, serde::Serialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, serde::Serialize)]
 pub enum Address {
     Log,
     Chat,
@@ -49,8 +49,8 @@ impl ToAddress for Address {
 // -----------------------------------------------------------------------------
 #[tokio::main]
 async fn main() -> Result<()> {
+    tinylog::init_logger().await.expect("Failed to connect logger");
     // Setup
-    pretty_env_logger::init();
     let config = config::Config::new()?;
     let config = Box::new(config);
     let config = Box::leak(config);

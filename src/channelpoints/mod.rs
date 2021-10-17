@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
+use log::{info, error};
 use neotwitch::TwitchMessage;
 use rand::distributions::Alphanumeric;
 use rand::prelude::*;
-use tinylog::{tl_error, tl_info};
 use tinyroute::{Agent, Message, ToAddress};
 use tokio::sync::mpsc;
 use tokio::time;
@@ -128,7 +128,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                 s
             }
             Err(_) => {
-                tl_error!(agent, Address::Log, "Failed to connect to Twitch IRC via websockets");
+                error!("Failed to connect to Twitch IRC via websockets");
                 time::sleep(Duration::from_secs(reconnect_count)).await;
                 continue;
             }
@@ -140,7 +140,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
         let heartbeat_tx = heartbeat(sink_tx.clone(), response_tx.clone());
 
         if let Err(e) = sink_tx.send(listen_to_topics.clone()).await {
-            tl_error!(agent, Address::Log, "Websocket TX error: {}", e);
+            error!("Websocket TX error: {}", e);
             break;
         };
 
@@ -150,7 +150,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                     match response {
                         None => break,
                         Some(Err(e)) => {
-                            tl_error!(agent, Address::Log, "Channel points websocket closed: {}", e);
+                            error!("Channel points websocket closed: {}", e);
                             break;
                         }
                         Some(Ok(())) => continue,
@@ -159,11 +159,11 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                 ws_msg = stream.next() => {
                     match ws_msg {
                         None => {
-                            tl_error!(agent, Address::Log, "Channel points websocket closed");
+                            error!("Channel points websocket closed");
                             break;
                         }
                         Some(Err(e)) => {
-                            tl_error!(agent, Address::Log, "Websocket error: {}", e);
+                            error!("Websocket error: {}", e);
                             break;
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
@@ -173,7 +173,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                                     match twitch_data {
                                         TwitchMessage::Pong => {
                                             if let Err(e) = heartbeat_tx.send(Instant::now()).await {
-                                                tl_error!(agent, Address::Log, "Heartbeat error: {}", e);
+                                                error!("Heartbeat error: {}", e);
                                                 break
                                             }
                                         },
@@ -182,15 +182,15 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                                     }
                                     // Log twith payload (maybe not?)
                                     let s = serde_json::to_string(&twitch_data).expect("this was successfully serialize before, stop complaining");
-                                    tl_info!(agent, Address::Log, "{}", s);
+                                    info!("{}", s);
                                 }
                                 Err(e) => {
-                                    tl_error!(agent, Address::Log, "Failed to serialize: {}", e);
+                                    error!("Failed to serialize: {}", e);
                                     continue;
                                 }
                             }
 
-                            agent.send_remote(&subscribers, bytes)?;
+                            agent.send_remote(subscribers.iter().copied(), bytes)?;
                         }
                         Some(Ok(_)) => continue,
                     }
@@ -199,19 +199,19 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                     let msg = agent_msg?;
                     match msg {
                         Message::RemoteMessage { sender, host, bytes } => {
-                            tl_info!(agent, Address::Log, "{}@{} > {:?}", sender.to_string(), host, bytes);
+                            info!("{}@{} > {:?}", sender.to_string(), host, bytes);
 
                             match bytes.as_ref() {
                                 b"shutdown" => agent.shutdown_router(),
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
-                                        tl_info!(agent, Address::Log, "{} subscribed to channelpoint events", sender.to_string());
+                                        info!("{} subscribed to channelpoint events", sender.to_string());
                                         subscribers.push(sender.clone());
                                         agent.track(sender)?;
                                     }
                                 }
                                 bytes if serde_json::from_slice::<TwitchMessage>(&bytes).is_ok() => {
-                                    agent.send_remote(&subscribers, bytes)?;
+                                    agent.send_remote(subscribers.iter().copied(), bytes)?;
                                 }
                                 _ => {
                                     eprintln!("{:?}", "failed to serialize data");
@@ -220,7 +220,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
 
                         }
                         Message::AgentRemoved(sender) => {
-                            tl_info!(agent, Address::Log, "{} subscribed to channelpoint events", sender.to_string());
+                            info!("{} subscribed to channelpoint events", sender.to_string());
                             subscribers.retain(|s| s != &sender);
                         }
                         Message::Shutdown => return Ok(()),
