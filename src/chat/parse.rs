@@ -76,7 +76,7 @@ fn parse_msg(
     // Username
     let mut cursor = Cursor::new(prefix);
     cursor.skip(":");
-    let username = cursor.next_pat("!", false)?;
+    let nick = cursor.next_pat("!", false)?;
 
     // Channel
     let channel = param;
@@ -94,7 +94,7 @@ fn parse_msg(
         (msg, is_action)
     };
 
-    Some(IrcMessage::new(username.into(), channel.into(), msg.into(), is_action, tags))
+    Some(IrcMessage::new(nick.into(), channel.into(), msg.into(), is_action, tags))
 }
 
 fn parse_tags(cursor: &mut Cursor) -> HashMap<String, String> {

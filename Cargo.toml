@@ -1,18 +1,21 @@
 [package]
 name = "neotwitch"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = []
+logging = ["tinylog"]
 
 [dependencies]
+log = { version = "0.4.14" }
+tinylog = { path = "../tinylog", optional = true }
 anyhow = "1.0.44"
+chrono = { version = "0.4.19", features = ["serde"] }
 futures-util = { version = "0.3.16", features = ["sink"] }
-log = "0.4.14"
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
-tinylog = { path = "../tinylog" }
 # tinyroute = { git = "https://github.com/togglebyte/tinyroute" }
 tinyroute = { path = "../tinyroute" }
 tokio = { version = "1.12.0", features = ["full"] }

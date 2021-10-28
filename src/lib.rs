@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use chrono::{DateTime, Local};
+
 
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +20,8 @@ pub enum Irc {
 /// Priv message (channel message)
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IrcMessage {
-    pub user: String,
+    pub timestamp: DateTime<Local>,
+    pub nick: String,
     pub channel: String,
     pub message: String,
     pub action: bool,
@@ -27,14 +30,15 @@ pub struct IrcMessage {
 
 impl IrcMessage {
     pub fn new(
-        user: String,
+        nick: String,
         channel: String,
         message: String,
         action: bool,
         tags: HashMap<String, String>,
     ) -> Self {
         Self {
-            user,
+            timestamp: Local::now(),
+            nick,
             channel,
             message,
             action,
@@ -109,7 +113,7 @@ pub struct FollowEvent {
 /// ```text
 /// topic: channel-subscribe-events-v1
 /// ```
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SubscribeEvent {
     // benefit_end_month: String, // Undocumented field, go figure
     // time: String,
@@ -154,7 +158,7 @@ pub struct SubscribeEvent {
     pub sub_message: SubscribeMessage,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SubscribeMessage {
     pub message: String,
     // emotes: Option<>
