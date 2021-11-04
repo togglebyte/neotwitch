@@ -1,6 +1,4 @@
 use anyhow::Result;
-#[cfg(feature="logging")]
-use tinylog::Logger;
 use tinyroute::{Router, ToAddress};
 
 mod channelpoints;

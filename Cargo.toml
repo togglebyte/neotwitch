@@ -9,14 +9,13 @@ logging = ["tinylog"]
 
 [dependencies]
 log = { version = "0.4.14" }
-tinylog = { path = "../tinylog", optional = true }
+tinylog = { git = "https://github.com/togglebyte/tinylog", optional = true }
 anyhow = "1.0.44"
 chrono = { version = "0.4.19", features = ["serde"] }
 futures-util = { version = "0.3.16", features = ["sink"] }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
-# tinyroute = { git = "https://github.com/togglebyte/tinyroute" }
-tinyroute = { path = "../tinyroute" }
+tinyroute = { git = "https://github.com/togglebyte/tinyroute" }
 tokio = { version = "1.12.0", features = ["full"] }
 tokio-tungstenite = { version = "0.15.0", features = ["rustls-tls"] }

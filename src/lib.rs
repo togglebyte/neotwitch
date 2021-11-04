@@ -18,7 +18,7 @@ pub enum Irc {
 //     - Priv message -
 // -----------------------------------------------------------------------------
 /// Priv message (channel message)
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct IrcMessage {
     pub timestamp: DateTime<Local>,
     pub nick: String,
@@ -44,6 +44,14 @@ impl IrcMessage {
             action,
             tags,
         }
+    }
+
+    pub fn timestamp(&self) -> String {
+        self.timestamp.format("%H:%M:%S").to_string()
+    }
+
+    pub fn color(&self) -> Option<&str> {
+        self.tags.get("color").map(|s| s as &str)
     }
 }
 

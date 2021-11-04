@@ -84,7 +84,7 @@ pub async fn run(
                             break; // cause a reconnect
                         }
                         Some(Ok(WsMessage::Text(msg))) => {
-                            info!("{}", msg);
+                            info!("{:?}", msg);
 
                             if msg.starts_with("PING") {
                                 info!("> Ping");
@@ -98,7 +98,7 @@ pub async fn run(
 
                             if let Some(msg) = parse::parse(&msg) {
                                 let bytes = serde_json::to_vec(&msg).unwrap();
-                                agent.send_remote(subscribers.iter().copied(), &bytes)?;
+                                agent.send_remote(subscribers.iter().copied(), &bytes).await?;
                             }
                         }
                         Some(_) => {} // unsupported message
@@ -112,12 +112,19 @@ pub async fn run(
                             info!("{}@{} > {:?}", sender.to_string(), host, bytes);
 
                             match bytes.as_ref() {
-                                b"shutdown" => agent.shutdown_router(),
+                                b"shutdown" => agent.shutdown_router().await,
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
                                         info!("{} subscribed to irc", sender.to_string());
                                         subscribers.push(sender.clone());
-                                        agent.track(sender)?;
+                                        agent.track(sender).await?;
+                                    }
+                                }
+                                // If it's nor shutdown or sub then it's probably some test data
+                                bytes => {
+                                    let irc_msg = std::str::from_utf8(&bytes).map(parse::parse).unwrap().unwrap();
+                                    if let Ok(serialized_message) = serde_json::to_vec(&irc_msg) {
+                                        agent.send_remote(subscribers.iter().copied(), &serialized_message).await?;
                                     }
                                 }
                                 _ => {}

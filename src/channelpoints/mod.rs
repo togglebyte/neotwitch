@@ -90,6 +90,9 @@ fn heartbeat(sink_tx: mpsc::Sender<WsMessage>, response_tx: mpsc::Sender<Result<
     tx
 }
 
+// Agent here is used to reive commands to shut down,
+// but also to pass on test data.
+// This is a poor design
 pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) -> Result<()> {
     let topics = [
         format!("channel-bits-events-v2.{}", config.channel_id),
@@ -190,7 +193,7 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                                 }
                             }
 
-                            agent.send_remote(subscribers.iter().copied(), bytes)?;
+                            agent.send_remote(subscribers.iter().copied(), bytes).await?;
                         }
                         Some(Ok(_)) => continue,
                     }
@@ -202,16 +205,17 @@ pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) 
                             info!("{}@{} > {:?}", sender.to_string(), host, bytes);
 
                             match bytes.as_ref() {
-                                b"shutdown" => agent.shutdown_router(),
+                                b"shutdown" => agent.shutdown_router().await,
                                 b"sub" => {
                                     if !subscribers.contains(&sender) {
                                         info!("{} subscribed to channelpoint events", sender.to_string());
                                         subscribers.push(sender.clone());
-                                        agent.track(sender)?;
+                                        agent.track(sender).await?;
                                     }
                                 }
+                                // If it's nor shutdown or sub then it's probably some test data
                                 bytes if serde_json::from_slice::<TwitchMessage>(&bytes).is_ok() => {
-                                    agent.send_remote(subscribers.iter().copied(), bytes)?;
+                                    agent.send_remote(subscribers.iter().copied(), bytes).await?;
                                 }
                                 _ => {
                                     eprintln!("{:?}", "failed to serialize data");
