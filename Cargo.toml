@@ -5,11 +5,12 @@ edition = "2021"
 
 [features]
 default = []
-logging = ["tinylog"]
+tokio-rt = ["tinyroute/tokio-rt"]
+# logging = ["tinylog"]
 
 [dependencies]
 log = { version = "0.4.14" }
-tinylog = { git = "https://github.com/togglebyte/tinylog", optional = true }
+# tinylog = { git = "https://github.com/togglebyte/tinylog", features=["tokio-rt"], optional = true }
 anyhow = "1.0.44"
 chrono = { version = "0.4.19", features = ["serde"] }
 futures-util = { version = "0.3.16", features = ["sink"] }

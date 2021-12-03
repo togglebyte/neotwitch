@@ -1,12 +1,10 @@
-use std::time::Duration;
 use anyhow::Result;
+use log::{error, info};
+use std::time::Duration;
 use tinyroute::{Agent, Message, ToAddress};
 use tokio::time;
-use log::{error, info};
 
-use super::twitch::{
-    connect_chat, Sink, SinkExt, Stream, StreamExt, WsMessage,
-};
+use super::twitch::{connect_chat, Sink, SinkExt, Stream, StreamExt, WsMessage};
 use super::Address;
 use crate::config::Config;
 
@@ -25,7 +23,7 @@ impl IrcWriter {
 }
 
 // The only reason we pass an agent to this function is to be able to log.
-async fn connect_irc(config: &Config ) -> Result<(IrcWriter, Stream)> {
+async fn connect_irc(config: &Config) -> Result<(IrcWriter, Stream)> {
     let (sink, stream) = connect_chat().await?;
     let mut sink = IrcWriter(sink);
 
@@ -44,10 +42,7 @@ async fn connect_irc(config: &Config ) -> Result<(IrcWriter, Stream)> {
 // -----------------------------------------------------------------------------
 //     - Run -
 // -----------------------------------------------------------------------------
-pub async fn run(
-    mut agent: Agent<(), Address>,
-    config: &crate::config::Config,
-) -> Result<()> {
+pub async fn run(mut agent: Agent<(), Address>, config: &crate::config::Config) -> Result<()> {
     let mut subscribers: Vec<Address> = Vec::new();
 
     let mut reconnect_count = 0;
@@ -122,12 +117,12 @@ pub async fn run(
                                 }
                                 // If it's nor shutdown or sub then it's probably some test data
                                 bytes => {
-                                    let irc_msg = std::str::from_utf8(&bytes).map(parse::parse).unwrap().unwrap();
-                                    if let Ok(serialized_message) = serde_json::to_vec(&irc_msg) {
-                                        agent.send_remote(subscribers.iter().copied(), &serialized_message).await?;
+                                    if let Ok(Some(irc_msg)) = std::str::from_utf8(&bytes).map(parse::parse) {
+                                        if let Ok(serialized_message) = serde_json::to_vec(&irc_msg) {
+                                            agent.send_remote(subscribers.iter().copied(), &serialized_message).await?;
+                                        }
                                     }
                                 }
-                                _ => {}
                             }
 
                         }
