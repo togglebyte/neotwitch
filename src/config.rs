@@ -35,7 +35,7 @@ fn validate_channel(channel: &str) -> Option<String> {
 
 impl Config {
     pub fn new() -> Result<Self> {
-        let channel_id = env::var(NEO_TWITCH_CHANNEL).map_err(|_| anyhow!("Channel id missing{}"))?;
+        let channel_id = env::var(NEO_TWITCH_CHANNEL).map_err(|_| anyhow!("Channel id missing"))?;
         let token = env::var(NEO_TWITCH_TOKEN).map_err(|_| anyhow!("OAuth token missing"))?;
         let nick = env::var(NEO_TWITCH_IRC_NICK).map_err(|_| anyhow!("Nick is missing"))?;
         let irc_channels = env::var(NEO_TWITCH_IRC_CHANNELS).map_err(|_| anyhow!("Channels are missing"))?;

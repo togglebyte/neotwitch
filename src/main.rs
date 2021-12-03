@@ -55,9 +55,9 @@ async fn main() -> Result<()> {
     let mut router = Router::new();
 
     // Agents
-    let chat_agent = router.new_agent(1024, Address::Chat)?;
-    let cpoints_agent = router.new_agent(1024, Address::ChannelPoints)?;
-    let server_agent = router.new_agent(1024, Address::Server)?;
+    let chat_agent = router.new_agent(None, Address::Chat)?;
+    let cpoints_agent = router.new_agent(None, Address::ChannelPoints)?;
+    let server_agent = router.new_agent(None, Address::Server)?;
 
     // Handles, so the application can close properly
     let chat_handle = tokio::spawn(chat::run(chat_agent, config));
